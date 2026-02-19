@@ -1,124 +1,171 @@
 pipeline {
-environment { // Declaration of environment variables
-DOCKER_ID = "laurenthoarau" // replace this with your docker-id
-DOCKER_IMAGE = "datascientestapi"
-DOCKER_TAG = "v.${BUILD_ID}.0" // we will tag our images with the current build in order to increment the value by 1 with each new build
-}
-agent any // Jenkins will be able to select all available agents
-stages {
-  stage(' Docker Build'){ // docker build image stage
-    steps {
-      script {
-      sh '''
-        docker rm -f jenkins
-        docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG .
-      sleep 6
-      '''
-      }
-    }
-  }
-  stage('Docker run'){ // run container from our builded image
-    steps {
-      script {
-      sh '''
-      docker run -d -p 80:80 --name jenkins $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
-      sleep 10
-      '''
-      }
-    }
-  }
-  stage('Test Acceptance'){ // we launch the curl command to validate that the container responds to the request
-    steps {
-      script {
-      sh '''
-      curl localhost
-      '''
-      }
-    }
-  }
-  stage('Docker Push'){ //we pass the built image to our docker hub account
-    environment
-    {
-      DOCKER_PASS = credentials("DOCKER_HUB_PASS") // we retrieve  docker password from secret text called docker_hub_pass saved on jenkins
-    }
-    steps {
-      script {
-        sh '''
-        docker login -u $DOCKER_ID -p $DOCKER_PASS
-        docker push $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
-        '''
-      }
-    }
-  }
-  stage('Deploiement en dev'){
     environment {
-    KUBECONFIG = credentials("config") // we retrieve  kubeconfig from secret file called config saved on jenkins
+        DOCKER_ID   = "laurenthoarau"
+        MOVIE_IMAGE = "movie-service"
+        CAST_IMAGE  = "cast-service"
+        DOCKER_TAG  = "v.${BUILD_ID}.0"
     }
-    steps {
-      script {
-      sh '''
-      rm -Rf .kube
-      mkdir .kube
-      ls
-      cat $KUBECONFIG > .kube/config
-      cp fastapi/values.yaml values.yml
-      cat values.yml
-      sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-      helm upgrade --install app fastapi --values=values.yml --namespace dev
-      '''
-      }
-    }
-  }
-  stage('Deploiement en staging'){
-    environment {
-    KUBECONFIG = credentials("config") // we retrieve  kubeconfig from secret file called config saved on jenkins
-    }
-    steps {
-      script {
-      sh '''
-      rm -Rf .kube
-      mkdir .kube
-      ls
-      cat $KUBECONFIG > .kube/config
-      cp fastapi/values.yaml values.yml
-      cat values.yml
-      sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-      helm upgrade --install app fastapi --values=values.yml --namespace staging
-      '''
-      }
-    }
-  }
-  stage('Deploiement en prod'){
-    environment {
-      KUBECONFIG = credentials("config") // we retrieve  kubeconfig from secret file called config saved on jenkins
-      }
-      steps {
-        // Create an Approval Button with a timeout of 15minutes.
-        // this require a manuel validation in order to deploy on production environment
-        timeout(time: 15, unit: "MINUTES") {
-          input message: 'Do you want to deploy in production ?', ok: 'Yes'
+    agent any
+    stages {
+        stage('Docker Build') {
+            steps {
+                script {
+                    sh '''
+                        docker build -t $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG ./movie-service
+                        docker build -t $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG ./cast-service
+                        sleep 6
+                    '''
+                }
+            }
         }
-        script {
-          sh '''
-          rm -Rf .kube
-          mkdir .kube
-          ls
-          cat $KUBECONFIG > .kube/config
-          cp fastapi/values.yaml values.yml
-          cat values.yml
-          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-          helm upgrade --install app fastapi --values=values.yml --namespace prod
-          '''
+        stage('Docker Run') {
+            steps {
+                script {
+                    sh '''
+                        docker rm -f movie-test cast-test || true
+                        docker run -d -p 8001:8000 --name movie-test \
+                            -e DATABASE_URI=sqlite:///./test.db \
+                            -e CAST_SERVICE_HOST_URL=http://localhost:8002/api/v1/casts/ \
+                            $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG \
+                            uvicorn app.main:app --host 0.0.0.0 --port 8000
+                        docker run -d -p 8002:8000 --name cast-test \
+                            -e DATABASE_URI=sqlite:///./test.db \
+                            $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG \
+                            uvicorn app.main:app --host 0.0.0.0 --port 8000
+                        sleep 10
+                    '''
+                }
+            }
         }
-      }
+        stage('Test Acceptance') {
+            steps {
+                script {
+                    sh '''
+                        curl -f http://localhost:8001/api/v1/movies/docs || exit 1
+                        curl -f http://localhost:8002/api/v1/casts/docs  || exit 1
+                        docker rm -f movie-test cast-test || true
+                    '''
+                }
+            }
+        }
+        stage('Docker Push') {
+            environment {
+                DOCKER_PASS = credentials("DOCKER_HUB_PASS")
+            }
+            steps {
+                script {
+                    sh '''
+                        docker login -u $DOCKER_ID -p $DOCKER_PASS
+                        docker push $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
+                        docker push $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
+                    '''
+                }
+            }
+        }
+        stage('Deploiement en dev') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
+            steps {
+                script {
+                    sh '''
+                        rm -Rf .kube
+                        mkdir .kube
+                        cat $KUBECONFIG > .kube/config
+                        cp charts/values.yaml values-movie.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        helm upgrade --install movie-service charts --values=values-movie.yml --namespace dev
+                        cp charts/values.yaml values-cast.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        helm upgrade --install cast-service charts --values=values-cast.yml --namespace dev
+                    '''
+                }
+            }
+        }
+        stage('Deploiement en QA') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
+            steps {
+                script {
+                    sh '''
+                        rm -Rf .kube
+                        mkdir .kube
+                        cat $KUBECONFIG > .kube/config
+                        cp charts/values.yaml values-movie.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        helm upgrade --install movie-service charts --values=values-movie.yml --namespace qa
+                        cp charts/values.yaml values-cast.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        helm upgrade --install cast-service charts --values=values-cast.yml --namespace qa
+                    '''
+                }
+            }
+        }
+        stage('Deploiement en staging') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
+            steps {
+                script {
+                    sh '''
+                        rm -Rf .kube
+                        mkdir .kube
+                        cat $KUBECONFIG > .kube/config
+                        cp charts/values.yaml values-movie.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        helm upgrade --install movie-service charts --values=values-movie.yml --namespace staging
+                        cp charts/values.yaml values-cast.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        helm upgrade --install cast-service charts --values=values-cast.yml --namespace staging
+                    '''
+                }
+            }
+        }
+        stage('Deploiement en prod') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
+            when {
+                branch 'master'
+            }
+            steps {
+                timeout(time: 15, unit: "MINUTES") {
+                    input message: 'Deployer en production ?', ok: 'Oui, deployer'
+                }
+                script {
+                    sh '''
+                        rm -Rf .kube
+                        mkdir .kube
+                        cat $KUBECONFIG > .kube/config
+                        cp charts/values.yaml values-movie.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        helm upgrade --install movie-service charts --values=values-movie.yml --namespace prod
+                        cp charts/values.yaml values-cast.yml
+                        sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
+                        sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        helm upgrade --install cast-service charts --values=values-cast.yml --namespace prod
+                    '''
+                }
+            }
+        }
     }
-  }
-   post { // send email when the job has failed
+    post {
+        always {
+            sh 'docker rm -f movie-test cast-test || true'
+        }
+        success {
+            echo 'Pipeline execute avec succes !'
+        }
         failure {
-            echo "This will run if the job failed"
-            mail to: "fall-lewis.y@datascientest.com",
-                subject: "${env.JOB_NAME} - Build # ${env.BUILD_ID} has failed",
-                body: "For more info on the pipeline failure, check out the console output at ${env.BUILD_URL}"
+            echo 'Le pipeline a echoue.'
         }
     }
 }
