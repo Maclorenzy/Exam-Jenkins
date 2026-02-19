@@ -22,14 +22,39 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        docker rm -f movie-test cast-test || true
-                        docker run -d -p 8001:8000 --name movie-test \
-                            -e DATABASE_URI=sqlite:///./test.db \
+                        docker rm -f movie-test cast-test movie-db cast-db || true
+                        docker network rm test-network || true
+                        docker network create test-network
+
+                        docker run -d --name movie-db \
+                            --network test-network \
+                            -e POSTGRES_USER=movie_db_username \
+                            -e POSTGRES_PASSWORD=movie_db_password \
+                            -e POSTGRES_DB=movie_db_dev \
+                            postgres:12.1-alpine
+
+                        docker run -d --name cast-db \
+                            --network test-network \
+                            -e POSTGRES_USER=cast_db_username \
+                            -e POSTGRES_PASSWORD=cast_db_password \
+                            -e POSTGRES_DB=cast_db_dev \
+                            postgres:12.1-alpine
+
+                        sleep 10
+
+                        docker run -d --name movie-test \
+                            --network test-network \
+                            -e DATABASE_URI=postgresql://movie_db_username:movie_db_password@movie-db/movie_db_dev \
                             -e CAST_SERVICE_HOST_URL=http://cast-test:8000/api/v1/casts/ \
-                            $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
-                        docker run -d -p 8002:8000 --name cast-test \
-                            -e DATABASE_URI=sqlite:///./test.db \
-                            $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
+                            $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG \
+                            uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+                        docker run -d --name cast-test \
+                            --network test-network \
+                            -e DATABASE_URI=postgresql://cast_db_username:cast_db_password@cast-db/cast_db_dev \
+                            $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG \
+                            uvicorn app.main:app --host 0.0.0.0 --port 8000
+
                         sleep 15
                     '''
                 }
@@ -45,7 +70,6 @@ pipeline {
                         echo "Cast IP: $CAST_IP"
                         curl -f http://$MOVIE_IP:8000/api/v1/movies/docs || exit 1
                         curl -f http://$CAST_IP:8000/api/v1/casts/docs  || exit 1
-                        docker rm -f movie-test cast-test || true
                     '''
                 }
             }
@@ -161,7 +185,10 @@ pipeline {
     }
     post {
         always {
-            sh 'docker rm -f movie-test cast-test || true'
+            sh '''
+                docker rm -f movie-test cast-test movie-db cast-db || true
+                docker network rm test-network || true
+            '''
         }
         success {
             echo 'Pipeline execute avec succes !'
