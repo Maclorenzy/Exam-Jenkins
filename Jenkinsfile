@@ -25,14 +25,12 @@ pipeline {
                         docker rm -f movie-test cast-test || true
                         docker run -d -p 8001:8000 --name movie-test \
                             -e DATABASE_URI=sqlite:///./test.db \
-                            -e CAST_SERVICE_HOST_URL=http://localhost:8002/api/v1/casts/ \
-                            $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG \
-                            uvicorn app.main:app --host 0.0.0.0 --port 8000
+                            -e CAST_SERVICE_HOST_URL=http://cast-test:8000/api/v1/casts/ \
+                            $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
                         docker run -d -p 8002:8000 --name cast-test \
                             -e DATABASE_URI=sqlite:///./test.db \
-                            $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG \
-                            uvicorn app.main:app --host 0.0.0.0 --port 8000
-                        sleep 10
+                            $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
+                        sleep 15
                     '''
                 }
             }
@@ -41,8 +39,12 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        curl -f http://localhost:8001/api/v1/movies/docs || exit 1
-                        curl -f http://localhost:8002/api/v1/casts/docs  || exit 1
+                        MOVIE_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' movie-test)
+                        CAST_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cast-test)
+                        echo "Movie IP: $MOVIE_IP"
+                        echo "Cast IP: $CAST_IP"
+                        curl -f http://$MOVIE_IP:8000/api/v1/movies/docs || exit 1
+                        curl -f http://$CAST_IP:8000/api/v1/casts/docs  || exit 1
                         docker rm -f movie-test cast-test || true
                     '''
                 }
