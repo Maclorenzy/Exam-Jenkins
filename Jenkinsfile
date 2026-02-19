@@ -164,8 +164,8 @@ pipeline {
             environment {
                 KUBECONFIG = credentials("config")
             }
-            when {
-                branch 'master'
+            when { // prod uniquement sur master
+                expression { env.GIT_BRANCH == 'origin/master' }
             }
             steps {
                 timeout(time: 15, unit: "MINUTES") {
