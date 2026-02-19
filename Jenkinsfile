@@ -101,10 +101,12 @@ pipeline {
                         cp charts/values.yaml values-movie.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        sed -i "s+nodePort:.*+nodePort: 30007+g" values-movie.yml
                         helm upgrade --install movie-service charts --values=values-movie.yml --namespace dev
                         cp charts/values.yaml values-cast.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        sed -i "s+nodePort:.*+nodePort: 30008+g" values-cast.yml
                         helm upgrade --install cast-service charts --values=values-cast.yml --namespace dev
                     '''
                 }
@@ -123,10 +125,12 @@ pipeline {
                         cp charts/values.yaml values-movie.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        sed -i "s+nodePort:.*+nodePort: 30009+g" values-movie.yml
                         helm upgrade --install movie-service charts --values=values-movie.yml --namespace qa
                         cp charts/values.yaml values-cast.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        sed -i "s+nodePort:.*+nodePort: 30010+g" values-cast.yml
                         helm upgrade --install cast-service charts --values=values-cast.yml --namespace qa
                     '''
                 }
@@ -145,10 +149,12 @@ pipeline {
                         cp charts/values.yaml values-movie.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        sed -i "s+nodePort:.*+nodePort: 30011+g" values-movie.yml
                         helm upgrade --install movie-service charts --values=values-movie.yml --namespace staging
                         cp charts/values.yaml values-cast.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        sed -i "s+nodePort:.*+nodePort: 30012+g" values-cast.yml
                         helm upgrade --install cast-service charts --values=values-cast.yml --namespace staging
                     '''
                 }
@@ -173,10 +179,12 @@ pipeline {
                         cp charts/values.yaml values-movie.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$MOVIE_IMAGE+g" values-movie.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-movie.yml
+                        sed -i "s+nodePort:.*+nodePort: 30013+g" values-movie.yml
                         helm upgrade --install movie-service charts --values=values-movie.yml --namespace prod
                         cp charts/values.yaml values-cast.yml
                         sed -i "s+repository:.*+repository: $DOCKER_ID/$CAST_IMAGE+g" values-cast.yml
                         sed -i "s+tag:.*+tag: $DOCKER_TAG+g" values-cast.yml
+                        sed -i "s+nodePort:.*+nodePort: 30014+g" values-cast.yml
                         helm upgrade --install cast-service charts --values=values-cast.yml --namespace prod
                     '''
                 }
