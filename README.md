@@ -8,7 +8,7 @@
 
 ## 📋 Description
 
-Application de gestion de films et de castings basée sur une architecture **microservices** avec FastAPI, déployée automatiquement via un pipeline Jenkins sur un cluster Kubernetes K3s.
+Examen du déploiement d'une application de gestion de films et de castings basée sur une architecture **microservices** avec FastAPI, déployée automatiquement via un pipeline Jenkins sur un cluster Kubernetes K3s.
 
 ## 🏗️ Architecture
 
@@ -56,4 +56,4 @@ Images disponibles sur [hub.docker.com/u/laurenthoarau](https://hub.docker.com/u
 
 ## 👤 Auteur
 
-**Laurent Hoarau** - Promotion Ingénieur DevOps - DataScientest
+**Laurent Hoarau** - Promotion jan26_bootcamp_devops - DataScientest
